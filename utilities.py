@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import Dataset
-from tqdm.notebook import tqdm
+# from tqdm.notebook import tqdm
 from collections import Counter
 import torch.nn as nn
 import gc
@@ -20,6 +20,8 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pack_sequence
 # from DNN_model import GRUAutoEncoder, CustomModel, LSTMAutoEncoder
 import json
 import copy
+from tqdm import tqdm
+import scipy
 
 
 def save_tuple(data, path):
@@ -71,6 +73,9 @@ class Preprocessing:
         df0 = df.copy()
         df0["Time"] = df0.groupby(["Unit"]).cumcount() + 1
         return df0
+
+def rmse(predictions, targets):
+    return np.sqrt(np.mean((predictions-targets)**2))
 
 
 class AircraftDataset(Dataset):
