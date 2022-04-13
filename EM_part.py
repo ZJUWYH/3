@@ -15,9 +15,17 @@ test_label = pd.read_csv(DATA_PATH + "Test_mode.csv", header=None).values
 train_dataset = AircraftDataset(df_train, train_label)  # 不插0计算创建dataset的子类
 test_dataset = AircraftDataset(df_test, test_label)
 
-train_dataset_mode_a =  AircraftDataset_one_mode(df_train,train_label,-1)
-train_dataset_mode_b =  AircraftDataset_one_mode(df_train,train_label,1)
+train_dataset_mode_a = AircraftDataset_one_mode(df_train, train_label, -1)
+train_dataset_mode_b = AircraftDataset_one_mode(df_train, train_label, 1)
+test_dataset_mode_a = AircraftDataset_one_mode(df_test, test_label, -1)
+test_dataset_mode_b = AircraftDataset_one_mode(df_test, test_label, 1)
 
+path = DATA_PATH+'RUL.csv'
+RUL_frame = pd.read_csv(path, header=None)
+RUL = RUL_frame.values[:, 0]
+
+index_a = np.where(test_label == -1)[0]
+index_b = np.where(test_label == 1)[0]
 
 def ln_get_hat_rho_lk_numerator_m(x_lm, Phi_l, *args):
     # [mu_mk,Sigma_mk,sigma_mk_2]
@@ -59,7 +67,7 @@ def get_hat_rho_l(instance_l, *args
     for idx in range(num_mode):
         ln_numerator_list.append(ln_get_hat_rho_lk_numerator(instance_l, *args[idx]))
     sorted_list = np.sort(ln_numerator_list)[::-1]
-    if np.abs(sorted_list[0] - sorted_list[-1]) > 10:
+    if np.abs(sorted_list[0] - sorted_list[-1]) > 100:
         max_idx = np.argmax(ln_numerator_list)
         hat_rho_l = np.zeros((num_mode, 1))
         hat_rho_l[max_idx] = 1
@@ -76,7 +84,7 @@ def get_hat_rho_l(instance_l, *args
 
 def get_hat_Gamma_lm_k_and_hat_Sigma_lm_k(x_lm, Phi_l, *args):
     # [mu_mk,Sigma_mk,sigma_mk_2]
-    mu_mk, Sigma_mk, sigma_mk_2 = args
+    [mu_mk, Sigma_mk, sigma_mk_2] = args
     hat_Sigma_lm_k = np.linalg.inv(Phi_l.T @ Phi_l / sigma_mk_2 + np.linalg.inv(Sigma_mk))
     hat_Gamma_lm_k = hat_Sigma_lm_k @ (Phi_l.T @ x_lm / sigma_mk_2 + np.linalg.inv(Sigma_mk) @ mu_mk)
     return hat_Gamma_lm_k, hat_Sigma_lm_k
@@ -188,7 +196,7 @@ def get_new_para(instance, *args):
 #     return N_k_list / np.sum(N_k_list)
 
 
-def get_new_w(instance,Dk_list,*args):
+def get_new_w(instance, Dk_list, *args):
     num_mode = len(args)
     w_list = []
     for idx in range(num_mode):
@@ -204,7 +212,8 @@ def get_new_w(instance,Dk_list,*args):
             D_k = Dk_list[idx]
             hat_Gamma_l_k, hat_Sigma_l_k = get_hat_Gamma_lm_k_and_hat_Sigma_lm_k(x_l @ w_k, Phi_l,
                                                                                  *args[idx][-1])
-            denominator = np.sqrt(Phi_tau_l @ Sigma_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
+            # denominator = np.sqrt(Phi_tau_l @ Sigma_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
+            denominator = np.sqrt(Phi_tau_l @ hat_Sigma_l_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
             a2 = (Phi_tau_l @ hat_Sigma_l_k @ Phi_l.T @ x_l) / denominator  # 1*6
             b2 = sigma_k_2 * (D_k - Phi_tau_l @ hat_Sigma_l_k @ np.linalg.inv(Sigma_k) @ mu_k) / denominator  # 1*1
 
@@ -269,8 +278,8 @@ def EM_iteration(instance, Dk_list, iteration, limitation, *args):
                rmse(pi_list, pi_list_new) + rmse(w_list, w_list_new)
         args = args_new_all
         loss_list.append(loss)
-        if loss > limitation and abs(loss_list[-1]-loss_list[-2]) > 0.1 and \
-                abs(loss_list[-2]-loss_list[-3]) > 0.1:
+        if loss > limitation and (abs(loss_list[-1] - loss_list[-2]) > 0.005 or \
+                                  abs(loss_list[-2] - loss_list[-3]) > 0.005):
             print(f"iteration:{epoch},loss:{loss}")
             epoch += 1
             continue
@@ -302,12 +311,9 @@ if __name__ == "__main__":
                [mu_mj, Sigma_mj, sigma_mj_2], [mu_mj, Sigma_mj, sigma_mj_2], [mu_mj, Sigma_mj, sigma_mj_2],
                [mu_mj, Sigma_mj, sigma_mj_2], [mu_mj, Sigma_mj, sigma_mj_2], [mu_mj, Sigma_mj, sigma_mj_2]]]
 
-    dk_list = [-10,10]
+    dk_list = [-10, 10]
     result_args_a = EM_iteration(train_dataset_mode_a, [-10], 100, 0.125, *args_a)
     result_args_b = EM_iteration(train_dataset_mode_b, [10], 100, 0.125, *args_b)
     args_all = result_args_a + result_args_b
     result_args = EM_iteration(train_dataset, dk_list, 100, 0.2, *args_all)
     np.save('./numpy/arg_all_result_pycharm.npy', np.array(result_args, dtype=object))
-
-
-

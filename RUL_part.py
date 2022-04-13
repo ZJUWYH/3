@@ -56,27 +56,32 @@ def get_CDF_t(instance_q, t, *args):
     return Phi_t
 
 
-def get_single_RUL(instance_q, dk_list, *args):
+def get_single_RUL(instance_q,*args):
     """
-    *args:[pi,w,[mu,sigma],[mu,sigma]],[pi,w,[mu,sigma],[mu,sigma]] previous results
+    # *args:[pi,w,[mu,sigma],[mu,sigma]],[pi,w,[mu,sigma],[mu,sigma]] previous results
+    select_args [hat_D,w,mu,...]
     """
-    select_args = mode_para_selection(instance_q, dk_list, *args)
+    # select_args = mode_para_selection(instance_q,dk_list, *args)
     box = []
     for t in range(500):
-        A = get_CDF_t(instance_q, t, *select_args)
-        B = get_CDF_t(instance_q, 0, *select_args)
-        C = (A - B) / (1 - B)
-        D = abs(C - 0.5)
+        A = get_CDF_t(instance_q,t,*args)
+        B = get_CDF_t(instance_q,0,*args)
+        C = (A-B)/(1-B)
+        D = abs(C-0.5)
         box.append(D)
     RUL_q = box.index(min(box)) + 1
     return RUL_q
 
 
 def get_RUL(instance, dk_list, *args):
+    """
+    *args:[pi,w,[mu,sigma],[mu,sigma]],[pi,w,[mu,sigma],[mu,sigma]] previous results
+    """
     length = len(instance)
     RUL = []
     for idx in tqdm(range(length)):
-        RUL_q = get_single_RUL(instance[idx], dk_list, *args)
+        select_args = mode_para_selection(instance[idx],dk_list, *args)
+        RUL_q = get_single_RUL(instance[idx], *select_args)
         RUL.append(RUL_q)
     return np.array(RUL)
 

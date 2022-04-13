@@ -24,6 +24,14 @@ from tqdm import tqdm
 import scipy
 
 
+def generate_Phi_and_timeaxes(time):
+    timeaxes = np.array([(idx + 1) / 500 for idx in range(time)])
+    Phi = np.zeros((time, 3), dtype=np.float64)
+    for idx in range(1, time + 1):
+        Phi[idx - 1] = np.array([1, idx / 500, (idx / 500) ** 2])
+    return Phi, timeaxes
+
+
 def save_tuple(data, path):
     with open(path, 'w') as f_json:
         json.dump(data, f_json)
@@ -74,8 +82,9 @@ class Preprocessing:
         df0["Time"] = df0.groupby(["Unit"]).cumcount() + 1
         return df0
 
+
 def rmse(predictions, targets):
-    return np.sqrt(np.mean((predictions-targets)**2))
+    return np.sqrt(np.mean((predictions - targets) ** 2))
 
 
 class AircraftDataset(Dataset):
@@ -91,11 +100,11 @@ class AircraftDataset(Dataset):
         #         sensor = ['T24', 'T30', 'T50', 'P30', 'Nf', 'Nc', 'Ps30',
         #                   'phi', 'NRf', 'NRc', 'BPR', 'htBleed', 'W31', 'W32']
         sensor = ['T24', 'T30', 'T50', 'P30', 'Ps30', 'phi']
-        dai_hao = ["s1","s2","s3","s4","s5","s6"]
+        dai_hao = ["s1", "s2", "s3", "s4", "s5", "s6"]
         multi_sensor = []
-        for dai,sensor_name in zip(dai_hao,sensor):
+        for dai, sensor_name in zip(dai_hao, sensor):
             multi_sensor.append(np.array(self.df[sensor_name].values.tolist()[idx]))
-            single_sensor = np.array(self.df[sensor_name].values.tolist()[idx],dtype=np.float64)[:, None]
+            single_sensor = np.array(self.df[sensor_name].values.tolist()[idx], dtype=np.float64)[:, None]
             data[dai] = single_sensor
         multi_sensor = np.vstack(multi_sensor).transpose(1, 0)
         data["input"] = np.array(multi_sensor, dtype=np.float64)
