@@ -41,7 +41,7 @@ def ln_get_hat_rho_lk_numerator_m(x_lm, Phi_l, *args):
 
 def ln_get_hat_rho_lk_numerator(instance_l, *args):
     # [pi,w,[mu,sigma],[mu,sigma]]
-    dai_hao = ["s1", "s2", "s3", "s4", "s5", "s6"]
+    dai_hao = ['T24', 'T30', 'T50', 'P30', 'Ps30', 'phi', 'W31', 'W32']
     # print(args[0][2])
     Phi_l = instance_l["Phi_l"]
     x_l = instance_l["input"]
@@ -67,7 +67,7 @@ def get_hat_rho_l(instance_l, *args
     for idx in range(num_mode):
         ln_numerator_list.append(ln_get_hat_rho_lk_numerator(instance_l, *args[idx]))
     sorted_list = np.sort(ln_numerator_list)[::-1]
-    if np.abs(sorted_list[0] - sorted_list[-1]) > 100:
+    if np.abs(sorted_list[0] - sorted_list[-1]) > CFG.hat_rho_control:
         max_idx = np.argmax(ln_numerator_list)
         hat_rho_l = np.zeros((num_mode, 1))
         hat_rho_l[max_idx] = 1
@@ -95,7 +95,7 @@ def get_new_para(instance, *args):
     mu_list = []
     Sigma_list = []
     sigma_2_list = []
-    dai_hao = ["s1", "s2", "s3", "s4", "s5", "s6"]
+    dai_hao = ['T24', 'T30', 'T50', 'P30', 'Ps30', 'phi', 'W31', 'W32']
     pi_list = np.zeros((num_mode, 1))
     for idx in range(num_mode):
         sum_rho_lk = 0
@@ -118,6 +118,7 @@ def get_new_para(instance, *args):
                 x_lm = instance[l][name]
                 hat_Gamma_lm_k, hat_Sigma_lm_k = get_hat_Gamma_lm_k_and_hat_Sigma_lm_k(x_lm, Phi_l,
                                                                                        *args_m)
+
                 mu_k_list[m] += hat_rho_lk * hat_Gamma_lm_k
             #                 Sigma_k_list[m] += hat_rho_lk * (hat_Sigma_lm_k +
             #                                 (hat_Gamma_lm_k-mu_mk)@(hat_Gamma_lm_k-mu_mk).T)
@@ -126,14 +127,19 @@ def get_new_para(instance, *args):
             mu_k = args[idx][-1][0]
             hat_Gamma_l_k, hat_Sigma_l_k = get_hat_Gamma_lm_k_and_hat_Sigma_lm_k(x_l @ w_k, Phi_l,
                                                                                  *args[idx][-1])
-
             mu_k_list[-1] += hat_rho_lk * hat_Gamma_l_k
             #             Sigma_k_list[-1] += hat_rho_lk * (hat_Sigma_lm_k +
             #                                 (hat_Gamma_lm_k-mu_k)@(hat_Gamma_lm_k-mu_k).T)
 
             sum_rho_lk += hat_rho_lk
             sum_rho_lk_nl += hat_rho_lk * n_l
-        mu_list.append(mu_k_list / sum_rho_lk)
+
+        for m, name in enumerate(dai_hao):
+            mu_mk0 = CFG.mu_0_list[idx][m]
+            mu_k_list[m] += CFG.beta * mu_mk0
+        mu_k0 = CFG.mu_0_list[idx][-1]
+        mu_k_list[-1] += CFG.beta * mu_k0
+        mu_list.append(mu_k_list / (sum_rho_lk + CFG.beta))
         # Sigma_list.append(Sigma_k_list/sum_rho_lk)
     for idx in range(num_mode):
         sum_rho_lk = 0
@@ -181,7 +187,17 @@ def get_new_para(instance, *args):
             sum_rho_lk += hat_rho_lk
             sum_rho_lk_nl += hat_rho_lk * n_l
         # mu_list.append(mu_k_list/sum_rho_lk)
-        Sigma_list.append(Sigma_k_list / sum_rho_lk)
+        for m, name in enumerate(dai_hao):
+            mu_mk0 = CFG.mu_0_list[idx][m]
+            Sigma_mk0 = CFG.Sigma_0_list[idx][m]
+            mu_mk = mu_list[idx][m]
+            Sigma_k_list[m] += Sigma_mk0 + CFG.beta * (mu_mk-mu_mk0)@(mu_mk-mu_mk0).T
+        mu_k0 = CFG.mu_0_list[idx][-1]
+        Sigma_k0 = CFG.Sigma_0_list[idx][-1]
+        mu_k = mu_list[idx][-1]
+        Sigma_k_list[-1] += Sigma_k0 + CFG.beta * (mu_k-mu_k0)@(mu_k-mu_k0).T
+
+        Sigma_list.append(Sigma_k_list / (sum_rho_lk + CFG.tau + CFG.dim + 2))
         sigma_2_list.append(sigma_2_k_list / sum_rho_lk_nl)
         pi_list[idx] = sum_rho_lk
 
@@ -210,15 +226,16 @@ def get_new_w(instance, Dk_list, *args):
             Phi_l = instance[l]["Phi_l"]
             Phi_tau_l = Phi_l[-1].reshape(1, 3)
             D_k = Dk_list[idx]
+            hat_rho_lk = get_hat_rho_l(instance[l], *args)[idx]
             hat_Gamma_l_k, hat_Sigma_l_k = get_hat_Gamma_lm_k_and_hat_Sigma_lm_k(x_l @ w_k, Phi_l,
                                                                                  *args[idx][-1])
-            # denominator = np.sqrt(Phi_tau_l @ Sigma_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
-            denominator = np.sqrt(Phi_tau_l @ hat_Sigma_l_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
+            denominator = np.sqrt(Phi_tau_l @ Sigma_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
+            # denominator = np.sqrt(Phi_tau_l @ hat_Sigma_l_k @ Phi_l.T @ Phi_l @ hat_Sigma_l_k @ Phi_tau_l.T)
             a2 = (Phi_tau_l @ hat_Sigma_l_k @ Phi_l.T @ x_l) / denominator  # 1*6
             b2 = sigma_k_2 * (D_k - Phi_tau_l @ hat_Sigma_l_k @ np.linalg.inv(Sigma_k) @ mu_k) / denominator  # 1*1
 
-            sum_l_a2a2 += a2.T @ a2  # 6*6
-            sum_l_a2b2 += a2.T * b2  # 6*1
+            sum_l_a2a2 += hat_rho_lk * a2.T @ a2  # 6*6
+            sum_l_a2b2 += hat_rho_lk * a2.T * b2  # 6*1
         w_list.append(np.linalg.inv(sum_l_a2a2) @ sum_l_a2b2)
     return np.array(w_list)
 
